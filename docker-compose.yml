@@ -8,4 +8,5 @@ services:
       PROXY_HOST: "192.168.1.100"
       PROXY_PORT: "8080"
       CACHE_TTL: "300"
+      CATCHUP_DAYS: "7"   # 0 или отсутствие = без catchup-тегов
     restart: unless-stopped

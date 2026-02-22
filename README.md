@@ -27,13 +27,14 @@ http://ru7.tvtm.one/ch001/index.m3u8?token=user.v2_XXX...
 ## Схема работы
 
 ```
-Vision Player                    Прокси                      Провайдер
+Плеер (Vision/Chillio)           Прокси                      Провайдер
      │                              │                              │
      │ GET /playlist.m3u8           │                              │
      │─────────────────────────────>│ GET playlist от провайдера  │
      │                              │─────────────────────────────>│
      │                              │<─────────────────────────────│
      │<─────────────────────────────│ URL переписаны (токен в пути)│
+     │                              │ + catchup-атрибуты (опц.)   │
      │                              │                              │
      │ GET /stream/ru7.../TOKEN/ch001/index.m3u8?archive=X&archive_end=Y
      │─────────────────────────────>│                              │
@@ -68,6 +69,7 @@ environment:
   PROXY_HOST: "192.168.1.100"  # IP вашей машины в локальной сети
   PROXY_PORT: "8080"           # порт (опционально, по умолчанию 8080)
   CACHE_TTL: "300"             # кэш плейлиста в секундах (опционально)
+  CATCHUP_DAYS: "7"            # глубина архива в днях для Chillio (0 = отключено)
 ```
 
 ### 2. Запуск
@@ -78,7 +80,7 @@ docker compose up -d
 
 ### 3. Настройка плеера
 
-В Vision Player заменить URL плейлиста:
+В плеере (Vision / Chillio) заменить URL плейлиста:
 
 ```
 Было:  http://tvtm.one/pl/3/TOKEN1/playlist.m3u8
@@ -87,12 +89,24 @@ docker compose up -d
 
 ## Переменные окружения
 
-| Переменная     | Обязательная | По умолчанию | Описание                          |
-|----------------|:------------:|:------------:|-----------------------------------|
-| `PLAYLIST_URL` | ✓            | —            | Полный URL плейлиста провайдера   |
-| `PROXY_HOST`   | ✓            | —            | IP/хост прокси (виден плееру)     |
-| `PROXY_PORT`   |              | `8080`       | Порт прокси                       |
-| `CACHE_TTL`    |              | `300`        | Время кэша плейлиста (секунды)    |
+| Переменная     | Обязательная | По умолчанию | Описание                                               |
+|----------------|:------------:|:------------:|--------------------------------------------------------|
+| `PLAYLIST_URL` | ✓            | —            | Полный URL плейлиста провайдера                        |
+| `PROXY_HOST`   | ✓            | —            | IP/хост прокси (виден плееру)                          |
+| `PROXY_PORT`   |              | `8080`       | Порт прокси                                            |
+| `CACHE_TTL`    |              | `300`        | Время кэша плейлиста (секунды)                         |
+| `CATCHUP_DAYS` |              | `0`          | Глубина архива в днях; `0` — catchup-теги не добавляются |
+
+### Catchup (Chillio)
+
+При `CATCHUP_DAYS > 0` в каждый `#EXTINF` добавляются атрибуты для плеера Chillio:
+
+```
+#EXTINF:-1 tvg-id="ch001" group-title="News" catchup="default" catchup-days="7" catchup-source="http://proxy/stream/ru7.tvtm.one/TOKEN/ch001/index.m3u8?archive={utc}&archive_end={lutc}",Channel 1
+http://proxy/stream/ru7.tvtm.one/TOKEN/ch001/index.m3u8
+```
+
+Chillio подставляет UNIX-временны́е метки в `{utc}` / `{lutc}` — прокси пересылает их провайдеру как `utc` / `lutc`.
 
 ## API
 
@@ -105,13 +119,17 @@ docker compose up -d
 ## Верификация
 
 ```bash
-# Плейлист переписан корректно
+# Плейлист переписан корректно (без catchup-тегов при CATCHUP_DAYS=0)
+curl http://localhost:8080/playlist.m3u8
+
+# Плейлист с catchup-атрибутами (CATCHUP_DAYS=7)
+# → #EXTINF содержит catchup="default" catchup-days="7" catchup-source="...?archive={utc}&archive_end={lutc}"
 curl http://localhost:8080/playlist.m3u8
 
 # Прямой эфир
 curl "http://localhost:8080/stream/ru7.tvtm.one/TOKEN/ch001/index.m3u8"
 
-# Архив
+# Архив (запрос, который генерирует Chillio после подстановки меток)
 curl "http://localhost:8080/stream/ru7.tvtm.one/TOKEN/ch001/index.m3u8?archive=1771536600&archive_end=1771539300"
 ```
 

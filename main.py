@@ -12,6 +12,7 @@ PLAYLIST_URL = os.environ["PLAYLIST_URL"]
 PROXY_HOST = os.environ["PROXY_HOST"]
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "8080"))
 CACHE_TTL = int(os.environ.get("CACHE_TTL", "300"))
+CATCHUP_DAYS = int(os.environ.get("CATCHUP_DAYS", "0"))
 
 _cache: dict = {"body": None, "expires": 0}
 
@@ -46,6 +47,21 @@ def make_segments_absolute(m3u8_text: str, base_url: str) -> str:
     return "\n".join(lines)
 
 
+def inject_catchup(extinf_line: str, proxy_url: str) -> str:
+    attrs = (
+        f' catchup="default"'
+        f' catchup-days="{CATCHUP_DAYS}"'
+        f' catchup-source="{proxy_url}?archive={{utc}}&archive_end={{lutc}}"'
+    )
+    in_quote = False
+    for i, ch in enumerate(extinf_line):
+        if ch == '"':
+            in_quote = not in_quote
+        elif ch == ',' and not in_quote:
+            return extinf_line[:i] + attrs + extinf_line[i:]
+    return extinf_line + attrs
+
+
 async def fetch_playlist() -> str:
     now = time.time()
     if _cache["body"] is not None and now < _cache["expires"]:
@@ -57,12 +73,26 @@ async def fetch_playlist() -> str:
 
     raw = resp.text
     lines = []
+    pending_extinf: str | None = None
     for line in raw.splitlines():
         stripped = line.strip()
-        if stripped.startswith("http") and ".m3u8" in stripped:
-            lines.append(rewrite_stream_url(stripped))
+        if stripped.startswith("#EXTINF"):
+            pending_extinf = line
+        elif stripped.startswith("http") and ".m3u8" in stripped:
+            proxy_url = rewrite_stream_url(stripped)
+            if CATCHUP_DAYS > 0 and pending_extinf is not None:
+                pending_extinf = inject_catchup(pending_extinf, proxy_url)
+            if pending_extinf is not None:
+                lines.append(pending_extinf)
+                pending_extinf = None
+            lines.append(proxy_url)
         else:
+            if pending_extinf is not None:
+                lines.append(pending_extinf)
+                pending_extinf = None
             lines.append(line)
+    if pending_extinf is not None:
+        lines.append(pending_extinf)
 
     result = "\n".join(lines)
     _cache["body"] = result
