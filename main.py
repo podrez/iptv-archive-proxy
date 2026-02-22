@@ -116,13 +116,20 @@ async def stream(
     channel_path: str,
     archive: str | None = Query(default=None),
     archive_end: str | None = Query(default=None),
+    utc: str | None = Query(default=None),
+    utcend: str | None = Query(default=None),
 ):
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         if archive is not None and channel_path.endswith(".m3u8"):
-            # Archive mode (Shift catchup)
+            # Archive mode via Vision player (?archive=X&archive_end=Y, path is index.m3u8)
             channel = channel_path.split("/")[0]
             provider_url = f"http://{provider_host}/{channel}/mono.m3u8"
             params = {"token": token, "utc": archive, "lutc": archive_end}
+            resp = await client.get(provider_url, params=params)
+        elif utc is not None and channel_path.endswith(".m3u8"):
+            # Archive mode via Chillio player (?utc=X&utcend=Y, path is already mono.m3u8)
+            provider_url = f"http://{provider_host}/{channel_path}"
+            params = {"token": token, "utc": utc, "lutc": utcend}
             resp = await client.get(provider_url, params=params)
         else:
             # Live stream
