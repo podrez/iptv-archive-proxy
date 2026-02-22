@@ -1,0 +1,11 @@
+services:
+  proxy:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      PLAYLIST_URL: "http://tvtm.one/pl/3/TOKEN1/playlist.m3u8"
+      PROXY_HOST: "192.168.1.100"
+      PROXY_PORT: "8080"
+      CACHE_TTL: "300"
+    restart: unless-stopped
