@@ -87,7 +87,7 @@ async def fetch_playlist() -> str:
                 pending_extinf = None
             lines.append(proxy_url)
         else:
-            if pending_extinf is not None:
+            if pending_extinf is not None and not stripped.startswith("#"):
                 lines.append(pending_extinf)
                 pending_extinf = None
             lines.append(line)
